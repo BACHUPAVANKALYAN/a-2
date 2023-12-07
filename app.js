@@ -37,7 +37,7 @@ const authenticationToken = (request, response, next) => {
     jwtToken = authHeader.split(" ")[1];
   }
   if (jwtToken) {
-    jwt.verify(jwtToken, "MY_SECRET_TOKEN", async (error, payload) => {
+    jwt.verify(jwtToken, "MY_SECRET_KEY", async (error, payload) => {
       if (error) {
         response.status(401);
         response.status("Invalid JWT Token");
@@ -68,9 +68,8 @@ const tweetAccessVerification = async (request, response, next) => {
 };
 app.post("/register/", async (request, response) => {
   const { username, password, name, gender } = request.body;
-  let hashedpassword = await bcrypt.hash(password, 10);
-  let checkUserdetails = `SELECT * FROM user WHERE username='${username}';`;
-  let register = await db.get(checkUserdetails);
+  const checkUserdetails = `SELECT * FROM user WHERE username='${username}'`;
+  const register = await db.get(checkUserdetails);
   if (register !== undefined) {
     response.status(400);
     response.send("User already exists");
@@ -80,9 +79,8 @@ app.post("/register/", async (request, response) => {
       response.send("Password is too short");
     } else {
       const hashedpassword = await bcrypt.hash(password, 10);
-      const createUser = `INSERT INTO user(username,name,gender,password) VALUES('${username}','${hashedPassword}','${name}','${gender}')`;
+      const createUser = `INSERT INTO user(username,password,name,gender) VALUES('${username}','${hashedPassword}','${name}','${gender}')`;
       const dbUser = await db.run(createUser);
-      response.status(200);
       response.send("User created successfully");
     }
   }
@@ -116,7 +114,7 @@ app.get(
     const { username } = request;
     const followingpeopleids = await getfollowingpeopleofids(username);
     const gettweet = `SELECT username,tweet,date_time AS dateTime FROM user INNER JOIN tweet ON user.user_id=tweet.user_id 
-    WHERE user.user_id IN (${followingpeopleids}) ORDER BY tweet.date_time DESC LIMIT 4 ;`;
+    WHERE user.user_id IN (${followingpeopleids}) ORDER BY date_time DESC LIMIT 4 ;`;
     const getdbuser = await db.all(gettweet);
     response.send(getdbuser);
   }
