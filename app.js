@@ -40,7 +40,7 @@ const authenticationToken = (request, response, next) => {
     jwt.verify(jwtToken, "MY_SECRET_KEY", async (error, payload) => {
       if (error) {
         response.status(401);
-        response.status("Invalid JWT Token");
+        response.send("Invalid JWT Token");
       } else {
         request.username = payload.username;
         request.userId = payload.userId;
@@ -49,13 +49,13 @@ const authenticationToken = (request, response, next) => {
     });
   } else {
     response.status(401);
-    response.status("Invalid JWT Token");
+    response.send("Invalid JWT Token");
   }
 };
 
 const tweetAccessVerification = async (request, response, next) => {
   const { userId } = request;
-  const [tweetId] = request.params;
+  const { tweetId } = request.params;
   const gettweetquery = `SELECT * FROM tweet INNER JOIN follower ON tweet.user_id=follower.following_user_id WHERE tweet.tweet_id='${tweetId}'
      AND follower_user_id='${userId}';`;
   const tweet = await db.get(gettweetquery);
@@ -68,6 +68,7 @@ const tweetAccessVerification = async (request, response, next) => {
 };
 app.post("/register/", async (request, response) => {
   const { username, password, name, gender } = request.body;
+  const hashedpassword = await bcrypt.hash(password, 10);
   const checkUserdetails = `SELECT * FROM user WHERE username='${username}'`;
   const register = await db.get(checkUserdetails);
   if (register !== undefined) {
@@ -78,7 +79,7 @@ app.post("/register/", async (request, response) => {
       response.status(400);
       response.send("Password is too short");
     } else {
-      const hashedpassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
       const createUser = `INSERT INTO user(username,password,name,gender) VALUES('${username}','${hashedPassword}','${name}','${gender}')`;
       const dbUser = await db.run(createUser);
       response.send("User created successfully");
@@ -136,12 +137,31 @@ app.get(
   authenticationToken,
   tweetAccessVerification,
   async (request, response) => {
-    const { username, userId } = request;
+    const { payload } = request;
+    const { username, user_id, name, gender } = payload;
     const { tweetId } = request.params;
-    const gettweetquery = `SELECT tweet,(SELECT COUNT() FROM like WHERE tweet_id='${tweetId}') AS Likes, (SELECT COUNT() FROM reply WHERE tweet_id='${tweetId}')AS replies ,date_time AS dateTime 
-    FROM tweet WHERE tweet.tweet_id='${tweetId}';`;
-    const tweet = await db.get(gettweetquery);
-    response.send(tweet);
+    /* const gettweetquery = `SELECT tweet,(SELECT COUNT() FROM like WHERE tweet_id='${tweetId}') AS Likes, (SELECT COUNT() FROM reply WHERE tweet_id='${tweetId}') AS replies ,date_time AS dateTime 
+    FROM tweet WHERE tweet.tweet_id='${tweetId}';`;*/
+    const gettweet = `SELECT * FROM tweet WHERE tweet_id=${tweetId};`;
+    const tweetresult = await db.get(gettweet);
+    /* const tweet = await db.all(gettweetquery);*/
+    const userfollowersQuery = `SELECT * FROM follower INNER JOIN user ON user.user_id=follower.following_user_id WHERE follower.follower_user_id=${userId};`;
+    const userFollowers = await db.all(userfollowersQuery);
+    /* response.send(tweet);*/
+    if (
+      userFollowers.some(
+        (item) => item.following_user_id === tweetresult.user_id
+      )
+    ) {
+      const gettweetresultQuery = `SELECT tweet,COUNT(DISTINCT(like,like_id))AS likes,COUNT(DISTINCT(reply,reply_id)) AS replies,tweet.date_time AS dateTime
+      FROM tweet INNER JOIN like ON tweet.tweet_id=like.like_id INNER JOIN reply ON reply.tweet_id=tweet.tweet_id
+      WHERE tweet.tweet_id=${tweetId} AND tweet.user_id=${userFollowers[0].useer_id};`;
+      const tweetDetails = await db.get(gettweetresultQuery);
+      response.send(tweetDetails);
+    } else {
+      response.status(401);
+      response.send("Invalid Request");
+    }
   }
 );
 app.get(
